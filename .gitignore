@@ -1,0 +1,13 @@
+# Model checkpoints
+*.pt
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Unrelated directories
+econometrics-cheatsheet/
+matching_theory_assignment/
