@@ -56,9 +56,23 @@ def all_utilities(cfg: Config, v: torch.Tensor) -> torch.Tensor:
 
 def random_endowment(cfg: Config, batch_size: int,
                      device: torch.device | str = "cpu") -> torch.Tensor:
-    """Return [B] random endowment indices in [0, K)."""
-    K = num_allocations(cfg)
-    return torch.randint(0, K, (batch_size,), device=device)
+    """Return [B] endowment indices where every agent holds >= 1 item.
+
+    Valid endowments are the subset of [0, K) allocations in which each
+    agent receives at least one item.  For 3 agents / 4 items these are
+    exactly the 36 allocations with count-pattern (2,1,1) and its
+    permutations (out of 81 total).
+    """
+    A = cfg.num_agents
+    allocs = build_all_allocs(cfg)                            # [K, m]
+    counts = torch.stack(
+        [(allocs == i).sum(dim=1) for i in range(A)], dim=1  # [K, A]
+    )
+    valid = counts.min(dim=1).values >= 1                     # [K] bool
+    valid_idx = valid.nonzero(as_tuple=True)[0]               # [V]
+
+    sampled = torch.randint(0, len(valid_idx), (batch_size,))
+    return valid_idx[sampled].to(device)
 
 
 def endowment_utilities(U: torch.Tensor, endow_idx: torch.Tensor) -> torch.Tensor:
