@@ -1,0 +1,376 @@
+{
+  "trichotomous": {
+    "domain": "trichotomous",
+    "num_ranks": 3,
+    "results": [
+      {
+        "name": "Endowment",
+        "welfare": -1.9199999570846558,
+        "welfare_ratio": -1920000000.0,
+        "ir_viol": 0.0,
+        "pe_rate": 0.26499998569488525,
+        "irpe_rate": 0.6000000238418579,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      },
+      {
+        "name": "WMAX-IR",
+        "welfare": -0.7900000214576721,
+        "welfare_ratio": -790000064.0,
+        "ir_viol": 0.0,
+        "pe_rate": 1.0,
+        "irpe_rate": 0.1550000011920929,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      },
+      {
+        "name": "WMAX-PE",
+        "welfare": -0.7900000214576721,
+        "welfare_ratio": -790000064.0,
+        "ir_viol": 0.16500000655651093,
+        "pe_rate": 1.0,
+        "irpe_rate": 0.10999999940395355,
+        "nom_mean": 0.0033333334140479565,
+        "nom_viol": 0.009999999776482582
+      },
+      {
+        "name": "WMAX-IR-PE",
+        "welfare": -1.3350000381469727,
+        "welfare_ratio": -1335000064.0,
+        "ir_viol": 0.0,
+        "pe_rate": 0.6650000214576721,
+        "irpe_rate": 1.0,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      },
+      {
+        "name": "TTC-ordinal",
+        "welfare": -0.8650000095367432,
+        "welfare_ratio": -865000064.0,
+        "ir_viol": 0.0,
+        "pe_rate": 0.925000011920929,
+        "irpe_rate": 0.2150000035762787,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      },
+      {
+        "name": "Random-IR-PE",
+        "welfare": -1.3350000381469727,
+        "welfare_ratio": -1335000064.0,
+        "ir_viol": 0.0,
+        "pe_rate": 0.6650000214576721,
+        "irpe_rate": 1.0,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      },
+      {
+        "name": "LearnedNet",
+        "welfare": -1.3350000381469727,
+        "welfare_ratio": -1335000064.0,
+        "ir_viol": 0.0,
+        "pe_rate": 0.6650000214576721,
+        "irpe_rate": 1.0,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      }
+    ],
+    "violations": {
+      "ir": 0,
+      "nom": 0
+    },
+    "violation_details": {
+      "ir": [],
+      "nom": []
+    },
+    "training_time_s": 202.91209292411804
+  },
+  "trichotomous_extended_e3": {
+    "domain": "trichotomous_extended_e3",
+    "num_ranks": 4,
+    "results": [
+      {
+        "name": "Endowment",
+        "welfare": -3.944999933242798,
+        "welfare_ratio": -3944999936.0,
+        "ir_viol": 0.0,
+        "pe_rate": 0.19499999284744263,
+        "irpe_rate": 0.5849999785423279,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      },
+      {
+        "name": "WMAX-IR",
+        "welfare": -1.9299999475479126,
+        "welfare_ratio": -1930000000.0,
+        "ir_viol": 0.0,
+        "pe_rate": 1.0,
+        "irpe_rate": 0.25,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      },
+      {
+        "name": "WMAX-PE",
+        "welfare": -1.784999966621399,
+        "welfare_ratio": -1785000064.0,
+        "ir_viol": 0.4000000059604645,
+        "pe_rate": 1.0,
+        "irpe_rate": 0.125,
+        "nom_mean": 0.019999999552965164,
+        "nom_viol": 0.05999999865889549
+      },
+      {
+        "name": "WMAX-IR-PE",
+        "welfare": -2.994999885559082,
+        "welfare_ratio": -2995000064.0,
+        "ir_viol": 0.0,
+        "pe_rate": 0.6100000143051147,
+        "irpe_rate": 1.0,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      },
+      {
+        "name": "TTC-ordinal",
+        "welfare": -2.430000066757202,
+        "welfare_ratio": -2430000128.0,
+        "ir_viol": 0.0,
+        "pe_rate": 0.7149999737739563,
+        "irpe_rate": 0.36500000953674316,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      },
+      {
+        "name": "Random-IR-PE",
+        "welfare": -3.0216667652130127,
+        "welfare_ratio": -3021666816.0,
+        "ir_viol": 0.0,
+        "pe_rate": 0.6100000143051147,
+        "irpe_rate": 1.0,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      },
+      {
+        "name": "LearnedNet",
+        "welfare": -3.0350000858306885,
+        "welfare_ratio": -3035000064.0,
+        "ir_viol": 0.0,
+        "pe_rate": 0.6100000143051147,
+        "irpe_rate": 1.0,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      }
+    ],
+    "violations": {
+      "ir": 0,
+      "nom": 0
+    },
+    "violation_details": {
+      "ir": [],
+      "nom": []
+    },
+    "training_time_s": 196.967933177948
+  },
+  "four_chotomous_e4": {
+    "domain": "four_chotomous_e4",
+    "num_ranks": 4,
+    "results": [
+      {
+        "name": "Endowment",
+        "welfare": -5.699999809265137,
+        "welfare_ratio": -5699999744.0,
+        "ir_viol": 0.0,
+        "pe_rate": 0.11500000208616257,
+        "irpe_rate": 0.4399999976158142,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      },
+      {
+        "name": "WMAX-IR",
+        "welfare": -2.4200000762939453,
+        "welfare_ratio": -2420000256.0,
+        "ir_viol": 0.0,
+        "pe_rate": 1.0,
+        "irpe_rate": 0.25999999046325684,
+        "nom_mean": 0.004999999888241291,
+        "nom_viol": 0.014999999664723873
+      },
+      {
+        "name": "WMAX-PE",
+        "welfare": -2.1649999618530273,
+        "welfare_ratio": -2164999936.0,
+        "ir_viol": 0.4350000023841858,
+        "pe_rate": 1.0,
+        "irpe_rate": 0.14499999582767487,
+        "nom_mean": 0.03166666626930237,
+        "nom_viol": 0.09000000357627869
+      },
+      {
+        "name": "WMAX-IR-PE",
+        "welfare": -3.765000104904175,
+        "welfare_ratio": -3765000192.0,
+        "ir_viol": 0.0,
+        "pe_rate": 0.675000011920929,
+        "irpe_rate": 1.0,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      },
+      {
+        "name": "TTC-ordinal",
+        "welfare": -3.494999885559082,
+        "welfare_ratio": -3495000064.0,
+        "ir_viol": 0.0,
+        "pe_rate": 0.6399999856948853,
+        "irpe_rate": 0.35499998927116394,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      },
+      {
+        "name": "Random-IR-PE",
+        "welfare": -3.8062503337860107,
+        "welfare_ratio": -3806250496.0,
+        "ir_viol": 0.0,
+        "pe_rate": 0.675000011920929,
+        "irpe_rate": 1.0,
+        "nom_mean": 0.0016666667070239782,
+        "nom_viol": 0.004999999888241291
+      },
+      {
+        "name": "LearnedNet",
+        "welfare": -3.825000047683716,
+        "welfare_ratio": -3825000192.0,
+        "ir_viol": 0.0,
+        "pe_rate": 0.675000011920929,
+        "irpe_rate": 1.0,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      }
+    ],
+    "violations": {
+      "ir": 0,
+      "nom": 1
+    },
+    "violation_details": {
+      "ir": [],
+      "nom": [
+        {
+          "marginal_rank": [
+            [
+              3,
+              2,
+              1,
+              1
+            ],
+            [
+              0,
+              1,
+              3,
+              0
+            ],
+            [
+              2,
+              1,
+              0,
+              0
+            ]
+          ],
+          "endow_idx": 63,
+          "chosen_alloc": 63,
+          "agent": 0,
+          "violation": 1.0,
+          "misreport": [
+            3,
+            2,
+            0,
+            0
+          ],
+          "details": "agent 0 gain=1.00000 | misreport changes: item2:1->class1(unowned), item3:1->class1(unowned)"
+        }
+      ]
+    },
+    "training_time_s": 197.1024796962738
+  },
+  "strict": {
+    "domain": "strict",
+    "num_ranks": 4,
+    "results": [
+      {
+        "name": "Endowment",
+        "welfare": -5.934999942779541,
+        "welfare_ratio": -5935000064.0,
+        "ir_viol": 0.0,
+        "pe_rate": 0.17000000178813934,
+        "irpe_rate": 0.36500000953674316,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      },
+      {
+        "name": "WMAX-IR",
+        "welfare": -2.674999952316284,
+        "welfare_ratio": -2675000064.0,
+        "ir_viol": 0.0,
+        "pe_rate": 1.0,
+        "irpe_rate": 0.24500000476837158,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      },
+      {
+        "name": "WMAX-PE",
+        "welfare": -2.365000009536743,
+        "welfare_ratio": -2365000192.0,
+        "ir_viol": 0.4399999976158142,
+        "pe_rate": 1.0,
+        "irpe_rate": 0.10999999940395355,
+        "nom_mean": 0.0033333334140479565,
+        "nom_viol": 0.009999999776482582
+      },
+      {
+        "name": "WMAX-IR-PE",
+        "welfare": -3.3499999046325684,
+        "welfare_ratio": -3349999872.0,
+        "ir_viol": 0.0,
+        "pe_rate": 0.8050000071525574,
+        "irpe_rate": 1.0,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      },
+      {
+        "name": "TTC-ordinal",
+        "welfare": -3.384999990463257,
+        "welfare_ratio": -3385000192.0,
+        "ir_viol": 0.0,
+        "pe_rate": 0.699999988079071,
+        "irpe_rate": 0.3700000047683716,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      },
+      {
+        "name": "Random-IR-PE",
+        "welfare": -3.4136669635772705,
+        "welfare_ratio": -3413667072.0,
+        "ir_viol": 0.0,
+        "pe_rate": 0.8050000071525574,
+        "irpe_rate": 1.0,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      },
+      {
+        "name": "LearnedNet",
+        "welfare": -3.3949999809265137,
+        "welfare_ratio": -3395000064.0,
+        "ir_viol": 0.0,
+        "pe_rate": 0.8050000071525574,
+        "irpe_rate": 1.0,
+        "nom_mean": 0.0,
+        "nom_viol": 0.0
+      }
+    ],
+    "violations": {
+      "ir": 0,
+      "nom": 0
+    },
+    "violation_details": {
+      "ir": [],
+      "nom": []
+    },
+    "training_time_s": 188.9925467967987
+  }
+}

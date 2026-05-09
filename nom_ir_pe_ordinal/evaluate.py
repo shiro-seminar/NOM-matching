@@ -46,10 +46,13 @@ def evaluate_mechanism(name, mech_fn, cfg, marginal_rank, endow_idx, S, wmax_s, 
     nom_mean, nom_viol_rate = _nom_benchmark(cfg, mech_fn, marginal_rank, endow_idx, S,
                                              S_EVAL, M_EVAL)
 
+    wmax_m = float(wmax_s.mean())
+    welfare_ratio = float(welfare) / wmax_m if abs(wmax_m) > 1e-9 else 1.0
+
     return {
         "name":          name,
         "welfare":       float(welfare),
-        "welfare_ratio": float(welfare / wmax_s.mean().clamp(min=1e-9)),
+        "welfare_ratio": welfare_ratio,
         "ir_viol":       float(ir_viol),
         "pe_rate":       float(pe_rate),
         "irpe_rate":     float(irpe_rate),
