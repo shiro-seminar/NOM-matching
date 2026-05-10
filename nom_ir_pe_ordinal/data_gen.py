@@ -12,15 +12,29 @@ A training profile is:
 from __future__ import annotations
 import torch
 from .config import Config
-from .allocations import score_matrix, random_endowment
+from .allocations import score_matrix, random_endowment, build_all_allocs
 
 
 def sample_batch(cfg: Config) -> dict[str, torch.Tensor]:
+    """Sample a training batch with correct trichotomous domain constraints.
+
+    Trichotomous (Manjunath-Westkamp 2025): epsilon(3)=0, i.e. owned items
+    must be in class 1 or 2 (rank 0 or 1). Unowned items can be in any class.
+    """
     device = torch.device(cfg.device)
     B, A, m, R = cfg.batch_size, cfg.num_agents, cfg.num_items, cfg.num_ranks
 
-    marginal_rank = torch.randint(0, R, (B, A, m), device=device)
-    endow_idx     = random_endowment(cfg, B, device)
-    S             = score_matrix(cfg, marginal_rank)
+    endow_idx   = random_endowment(cfg, B, device)
+    allocs      = build_all_allocs(cfg)
+    endow_alloc = allocs[endow_idx.cpu()].to(device)   # [B, m]
 
+    marginal_rank = torch.zeros(B, A, m, dtype=torch.long, device=device)
+    for a in range(A):
+        for j in range(m):
+            owned_mask = (endow_alloc[:, j] == a)          # [B]
+            r_owned    = torch.randint(0, R - 1, (B,), device=device)  # {0,..,R-2}
+            r_unowned  = torch.randint(0, R,     (B,), device=device)  # {0,..,R-1}
+            marginal_rank[:, a, j] = torch.where(owned_mask, r_owned, r_unowned)
+
+    S = score_matrix(cfg, marginal_rank)
     return {"marginal_rank": marginal_rank, "endow_idx": endow_idx, "S": S}

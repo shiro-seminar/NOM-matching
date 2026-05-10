@@ -16,8 +16,31 @@ from __future__ import annotations
 
 import torch
 from .config import Config
-from .allocations import score_matrix, ir_pe_mask
+from .allocations import score_matrix, ir_pe_mask, build_all_allocs
 from .model import AllocationNet
+
+
+def _sample_trichotomous_mr(cfg: Config, endow_idx: torch.Tensor,
+                             B: int, N: int, device: torch.device) -> torch.Tensor:
+    """Sample [B*N, A, m] domain-consistent marginal ranks for trichotomous.
+
+    Owned items (those in endow_idx allocation) → rank in {0,...,R-2} (ε(R)=0).
+    Unowned items → rank in {0,...,R-1}.
+    """
+    A, m, R = cfg.num_agents, cfg.num_items, cfg.num_ranks
+    allocs      = build_all_allocs(cfg)
+    endow_alloc = allocs[endow_idx.cpu()]            # [B, m]
+    endow_exp   = endow_alloc.unsqueeze(1).expand(B, N, m).reshape(B * N, m).to(device)
+
+    BN = B * N
+    mr = torch.zeros(BN, A, m, dtype=torch.long, device=device)
+    for a in range(A):
+        for j in range(m):
+            owned      = (endow_exp[:, j] == a)
+            r_owned    = torch.randint(0, R - 1, (BN,), device=device)
+            r_unowned  = torch.randint(0, R,     (BN,), device=device)
+            mr[:, a, j] = torch.where(owned, r_owned, r_unowned)
+    return mr
 
 
 def _expected_score(probs: torch.Tensor, S: torch.Tensor) -> torch.Tensor:
@@ -53,9 +76,12 @@ def nom_loss(
     R = cfg.num_ranks
     device = marginal_rank.device
 
-    # Opponent and misreport pools (shared across agent iterations)
-    mr_opp = torch.randint(0, R, (B, S_nom, A, m), device=device)   # [B,S,A,m]
-    mr_mis = torch.randint(0, R, (B, M_nom, m),    device=device)   # [B,M,m]
+    # Domain-consistent opponent and misreport pools
+    mr_opp_flat = _sample_trichotomous_mr(cfg, endow_idx, B, S_nom, device)
+    mr_opp      = mr_opp_flat.reshape(B, S_nom, A, m)                # [B,S,A,m]
+    # Per-agent misreports: agent i's owned items constrained to {0,...,R-2}
+    mr_mis_flat = _sample_trichotomous_mr(cfg, endow_idx, B, M_nom, device)
+    mr_mis      = mr_mis_flat.reshape(B, M_nom, A, m)                # [B,M,A,m]
 
     all_violations = []
 
@@ -85,7 +111,7 @@ def nom_loss(
         # mr_opp (not mr_opp_i): opponents are random; agent i's slot
         # will be overwritten with the misreport
         mr_mis_full = mr_opp.unsqueeze(1).expand(B, M_nom, S_nom, A, m).clone()
-        mr_mis_full[:, :, :, i, :] = mr_mis.unsqueeze(2).expand(B, M_nom, S_nom, m)
+        mr_mis_full[:, :, :, i, :] = mr_mis[:, :, i, :].unsqueeze(2).expand(B, M_nom, S_nom, m)
 
         BMS         = B * M_nom * S_nom
         mr_mis_f    = mr_mis_full.reshape(BMS, A, m)

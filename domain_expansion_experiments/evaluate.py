@@ -23,32 +23,58 @@ from .data_gen import sample_batch, sample_domain_mr_flat
 from .model import AllocationNet
 from .benchmarks import BENCHMARKS
 
-S_EVAL = 8
-M_EVAL = 8
+S_EVAL = 16
+M_EVAL = 16
+CHUNK  = 2048   # max batch size for chunked NOM forward passes
+
+
+def _mech_fn_chunked(mech_fn, cfg, mr_flat, endow_rep, chunk=CHUNK):
+    """Call mech_fn in chunks to avoid OOM with large S/M."""
+    N = mr_flat.shape[0]
+    if N <= chunk:
+        S_flat = score_matrix(cfg, mr_flat)
+        return mech_fn(cfg, mr_flat, endow_rep, S_flat)
+    parts = []
+    for start in range(0, N, chunk):
+        end  = min(start + chunk, N)
+        S_ch = score_matrix(cfg, mr_flat[start:end])
+        p_ch = mech_fn(cfg, mr_flat[start:end], endow_rep[start:end], S_ch)
+        parts.append(p_ch.detach())
+    return torch.cat(parts, dim=0)
 
 
 @torch.no_grad()
 def evaluate_mechanism(name, mech_fn, cfg: Config, domain: DomainSpec,
-                       marginal_rank, endow_idx, S, wmax_s) -> dict:
-    B = marginal_rank.shape[0]
-    K = num_allocations(cfg)
+                       marginal_rank, endow_idx, S, wmax_s,
+                       eval_S: int | None = None,
+                       eval_M: int | None = None) -> dict:
+    """Evaluate a mechanism.
 
-    probs   = mech_fn(cfg, marginal_rank, endow_idx, S)
+    eval_S / eval_M: opponent/misreport samples for NOM evaluation.
+    Larger values give more reliable violation detection (default: S_EVAL/M_EVAL).
+    Uses chunked forward passes so large eval_S × eval_M values are feasible.
+    """
+    s_nom = eval_S or S_EVAL
+    m_nom = eval_M or M_EVAL
+
+    B = marginal_rank.shape[0]
+
+    probs   = _mech_fn_chunked(mech_fn, cfg, marginal_rank, endow_idx)
     ES      = torch.einsum("bk,bak->ba", probs, S)
     welfare = ES.sum(1).mean()
 
     s0      = endowment_scores(S, endow_idx)
     ir_viol = (ES < s0 - 1e-6).any(1).float().mean()
 
-    chosen   = probs.argmax(1)
-    pe_m     = pareto_mask(S)
-    irpe_m   = ir_pe_mask(cfg, S, endow_idx)
-    pe_rate  = pe_m.gather(1, chosen.unsqueeze(1)).squeeze(1).mean()
-    irpe_rate= irpe_m.gather(1, chosen.unsqueeze(1)).squeeze(1).mean()
+    chosen    = probs.argmax(1)
+    pe_m      = pareto_mask(S)
+    irpe_m    = ir_pe_mask(cfg, S, endow_idx)
+    pe_rate   = pe_m.gather(1, chosen.unsqueeze(1)).squeeze(1).mean()
+    irpe_rate = irpe_m.gather(1, chosen.unsqueeze(1)).squeeze(1).mean()
 
     nom_mean, nom_viol_rate = _nom_eval(cfg, domain, mech_fn,
                                         marginal_rank, endow_idx, S,
-                                        S_EVAL, M_EVAL)
+                                        s_nom, m_nom)
     wmax_m = float(wmax_s.mean())
     welfare_ratio = float(welfare) / wmax_m if abs(wmax_m) > 1e-9 else 1.0
 
@@ -65,6 +91,7 @@ def evaluate_mechanism(name, mech_fn, cfg: Config, domain: DomainSpec,
 
 
 def _nom_eval(cfg, domain, mech_fn, marginal_rank, endow_idx, S_true, S_nom, M_nom):
+    """NOM evaluation with chunked forward passes (handles large S_nom × M_nom)."""
     B, A, m = marginal_rank.shape
     device   = marginal_rank.device
     all_viol = []
@@ -76,8 +103,7 @@ def _nom_eval(cfg, domain, mech_fn, marginal_rank, endow_idx, S_true, S_nom, M_n
 
         mr_flat   = mr_opp.reshape(B * S_nom, A, m)
         endow_rep = endow_idx.unsqueeze(1).expand(B, S_nom).reshape(B * S_nom)
-        S_flat    = score_matrix(cfg, mr_flat)
-        p_flat    = mech_fn(cfg, mr_flat, endow_rep, S_flat)
+        p_flat    = _mech_fn_chunked(mech_fn, cfg, mr_flat, endow_rep)
 
         S_i_true = S_true[:, i, :]
         S_i_flat = S_i_true.unsqueeze(1).expand(B, S_nom, -1).reshape(B * S_nom, -1)
@@ -94,8 +120,7 @@ def _nom_eval(cfg, domain, mech_fn, marginal_rank, endow_idx, S_true, S_nom, M_n
         BMS      = B * M_nom * S_nom
         mr_mis_f = mr_mis_full.reshape(BMS, A, m)
         endow_r2 = endow_idx.view(B, 1, 1).expand(B, M_nom, S_nom).reshape(BMS)
-        S_mis_f  = score_matrix(cfg, mr_mis_f)
-        p_mis_f  = mech_fn(cfg, mr_mis_f, endow_r2, S_mis_f)
+        p_mis_f  = _mech_fn_chunked(mech_fn, cfg, mr_mis_f, endow_r2)
 
         S_i_bms = S_i_true.view(B, 1, 1, -1).expand(B, M_nom, S_nom, -1).reshape(BMS, -1)
         u_lie   = (p_mis_f * S_i_bms).sum(1).reshape(B, M_nom, S_nom)

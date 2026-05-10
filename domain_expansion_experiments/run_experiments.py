@@ -42,7 +42,10 @@ def run_one_domain(domain_name: str, args) -> dict:
         device=args.device,
         seed=args.seed,
     )
-    print(f"  num_ranks={cfg.num_ranks}  steps={cfg.steps}  S={cfg.S}  M={cfg.M}")
+    eval_S = getattr(args, "eval_S", None) or args.S * 4
+    eval_M = getattr(args, "eval_M", None) or args.M * 4
+    print(f"  num_ranks={cfg.num_ranks}  steps={cfg.steps}  "
+          f"train S={cfg.S} M={cfg.M}  eval S={eval_S} M={eval_M}")
 
     # ── Train ────────────────────────────────────────────────────────────
     print(f"\n[Training]")
@@ -66,11 +69,12 @@ def run_one_domain(domain_name: str, args) -> dict:
     wmax_s = (S.sum(1) + (1 - irpe_m) * (-1e9)).max(1).values
 
     # ── Benchmark evaluation ──────────────────────────────────────────────
-    print(f"\n[Benchmarks]")
+    print(f"\n[Benchmarks]  (eval_S={eval_S}, eval_M={eval_M}, n={args.n_eval})")
     results = []
     for bname, bfn in BENCHMARKS.items():
         r = evaluate_mechanism(bname, bfn, cfg_eval, domain,
-                               marginal_rank, endow_idx, S, wmax_s)
+                               marginal_rank, endow_idx, S, wmax_s,
+                               eval_S=eval_S, eval_M=eval_M)
         results.append(r)
 
     # ── Learned net evaluation ────────────────────────────────────────────
@@ -79,7 +83,8 @@ def run_one_domain(domain_name: str, args) -> dict:
         return net(mr_, mask=mask_, temperature=1e-3)
 
     r_net = evaluate_mechanism("LearnedNet", net_mech, cfg_eval, domain,
-                               marginal_rank, endow_idx, S, wmax_s)
+                               marginal_rank, endow_idx, S, wmax_s,
+                               eval_S=eval_S, eval_M=eval_M)
     results.append(r_net)
 
     print_table(results)
@@ -168,8 +173,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--steps",  type=int, default=1000)
     parser.add_argument("--n_eval", type=int, default=200)
-    parser.add_argument("--S",      type=int, default=4)
-    parser.add_argument("--M",      type=int, default=4)
+    parser.add_argument("--S",      type=int, default=4,  help="training NOM opponent samples")
+    parser.add_argument("--M",      type=int, default=4,  help="training NOM misreport samples")
+    parser.add_argument("--eval_S", type=int, default=None, help="eval NOM opponents (default: S*4)")
+    parser.add_argument("--eval_M", type=int, default=None, help="eval NOM misreports (default: M*4)")
     parser.add_argument("--batch",  type=int, default=64)
     parser.add_argument("--device", type=str, default="cpu")
     parser.add_argument("--seed",   type=int, default=42)
