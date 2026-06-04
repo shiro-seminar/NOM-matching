@@ -130,7 +130,7 @@ def _nom_eval(cfg, domain, mech_fn, marginal_rank, endow_idx, S_true, S_nom, M_n
 
         bc_gain = torch.relu(BC_l - BC_t.unsqueeze(1))
         wc_gain = torch.relu(WC_l - WC_t.unsqueeze(1))
-        max_obv = torch.min(bc_gain, wc_gain).max(1).values
+        max_obv = torch.max(bc_gain, wc_gain).max(1).values
         all_viol.append(max_obv)
 
     viol = torch.stack(all_viol, 1)
@@ -238,7 +238,7 @@ def record_violations(
 
         bc_gain = torch.relu(BC_l - BC_t.unsqueeze(1))
         wc_gain = torch.relu(WC_l - WC_t.unsqueeze(1))
-        obvious = torch.min(bc_gain, wc_gain)               # [B, M]
+        obvious = torch.max(bc_gain, wc_gain)               # [B, M]
         best_m  = obvious.argmax(1)                          # [B]
         max_obv = obvious.max(1).values                      # [B]
 

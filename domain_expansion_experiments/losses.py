@@ -103,7 +103,7 @@ def nom_loss(
 
         bc_gain  = torch.relu(BC_lie - BC_truth.unsqueeze(1))
         wc_gain  = torch.relu(WC_lie - WC_truth.unsqueeze(1))
-        obvious  = torch.min(bc_gain, wc_gain)
+        obvious  = torch.max(bc_gain, wc_gain)
         all_violations.append(obvious.max(1).values)           # [B]
 
     violations = torch.stack(all_violations, dim=1)   # [B, A]

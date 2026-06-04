@@ -101,7 +101,7 @@ def _nom_benchmark(cfg, mech_fn, marginal_rank, endow_idx, S_true, S_nom, M_nom)
 
         bc_gain  = torch.relu(BC_l - BC_t.unsqueeze(1))
         wc_gain  = torch.relu(WC_l - WC_t.unsqueeze(1))
-        max_obv  = torch.min(bc_gain, wc_gain).max(1).values   # [B]
+        max_obv  = torch.max(bc_gain, wc_gain).max(1).values   # [B]
         all_viol.append(max_obv)
 
     viol = torch.stack(all_viol, 1)   # [B, A]
