@@ -82,23 +82,23 @@ def run_trichotomous_checks(device: str) -> bool:
             ok &= (status12 == "PASS")
 
             # Check 3: each violating endowment has exactly 1 agent, and it is
-            # the agent with the smallest bundle (fewest owned items).
+            # the agent with the LARGEST bundle (most owned items).
+            # (In trichotomous (2,1,1) distribution the 2-item agent violates.)
             pat_ok = True
             for k_e, agents in viol_agents_per_endow.items():
                 if len(agents) != 1:
                     pat_ok = False
                     break
-                # smallest bundle = min count over agents
                 agent_counts = [(allocs[k_e] == i).sum().item() for i in range(A)]
-                min_count = min(agent_counts)
-                min_agents = [i for i, c in enumerate(agent_counts) if c == min_count]
-                if agents[0] not in min_agents:
+                max_count = max(agent_counts)
+                max_agents = [i for i, c in enumerate(agent_counts) if c == max_count]
+                if agents[0] not in max_agents:
                     pat_ok = False
                     break
             endows_with_viol = len(viol_agents_per_endow)
             status3 = "PASS" if pat_ok and endows_with_viol == len(endows) else "FAIL"
             print(f"  [CHECK 3] WMAX pattern : {endows_with_viol}/{len(endows)} endows "
-                  f"1-agent-each smallest-bundle    {status3}", flush=True)
+                  f"1-agent-each largest-bundle    {status3}", flush=True)
             ok &= (status3 == "PASS")
 
     return ok
