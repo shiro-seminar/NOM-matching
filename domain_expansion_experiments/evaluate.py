@@ -18,6 +18,7 @@ from .domains import DomainSpec, DOMAINS
 from .allocations import (
     score_matrix, build_all_allocs, endowment_scores,
     ir_pe_mask, ir_mask, pareto_mask, num_allocations,
+    fsd_ir_mask, unamb_pe_mask, unamb_ir_pe_mask,
 )
 from .data_gen import sample_batch, sample_domain_mr_flat
 from .model import AllocationNet
@@ -320,3 +321,154 @@ def print_violations(viol_records: dict, max_show: int = 3):
             print(f"       endow={rec['endow_idx']}  chosen={rec['chosen_alloc']}  "
                   f"violation={rec['violation']:.5f}")
             print(f"       {rec['details']}")
+
+
+# ---------------------------------------------------------------------------
+# Unambiguous (FOSD set-based) NOM evaluation
+# ---------------------------------------------------------------------------
+
+def _get_chosen_bundle_sorted(cfg: Config, mech_fn, mr_flat: torch.Tensor,
+                               endow_rep: torch.Tensor, agent_i: int,
+                               chunk: int = CHUNK) -> torch.Tensor:
+    """Sorted rank vector of agent i's bundle under deterministic mechanism output.
+
+    Returns [N, m] sorted ranks. Lower rank = better.
+    Unowned item slots padded with cfg.num_ranks (sentinel, sorts to end).
+    """
+    N = mr_flat.shape[0]
+    R = cfg.num_ranks
+    device = mr_flat.device
+    allocs_all = build_all_allocs(cfg).to(device)   # [K, m]
+
+    chosen_parts = []
+    for start in range(0, N, chunk):
+        end  = min(start + chunk, N)
+        S_ch = score_matrix(cfg, mr_flat[start:end])
+        p_ch = mech_fn(cfg, mr_flat[start:end], endow_rep[start:end], S_ch)
+        chosen_parts.append(p_ch.argmax(dim=1))
+    chosen = torch.cat(chosen_parts, dim=0)    # [N]
+
+    alloc_chosen = allocs_all[chosen]                          # [N, m]
+    agent_mask   = (alloc_chosen == agent_i).float()           # [N, m]
+    ranks_i      = mr_flat[:, agent_i, :].float()              # [N, m]
+    bundle       = ranks_i * agent_mask + float(R) * (1.0 - agent_mask)
+    sorted_b, _  = torch.sort(bundle, dim=-1)                  # [N, m]
+    return sorted_b
+
+
+@torch.no_grad()
+def _unamb_nom_eval(cfg: Config, domain: DomainSpec, mech_fn,
+                    marginal_rank: torch.Tensor, endow_idx: torch.Tensor,
+                    S_nom: int, M_nom: int) -> tuple[float, float]:
+    """Unambiguous NOM evaluation using set-based FOSD comparison.
+
+    For each agent i and misreport r':
+      S_truth   = {bundle i gets under truth  × S_nom opponent profiles}
+      S_lie(r') = {bundle i gets under r'     × S_nom opponent profiles}
+
+      fosd_T_over_L[s_t, s_l] = 1 iff truth(s_t) ⪰_FOSD lie(r', s_l)
+
+      BC violation: ∃s_l: ∀s_t, NOT fosd_T_over_L[s_t, s_l]
+        (some lie scenario whose bundle no truth bundle can dominate)
+      WC violation: ∃s_t: ∀s_l, NOT fosd_T_over_L[s_t, s_l]
+        (some truth scenario whose bundle can't dominate any lie bundle)
+      NOM violation = BC OR WC
+    """
+    B, A, m_ = marginal_rank.shape
+    device   = marginal_rank.device
+    all_viol = []
+
+    for i in range(A):
+        # --- Truth: S_nom opponent profiles with agent i fixed to truth ---
+        mr_opp_flat = sample_domain_mr_flat(cfg, domain, endow_idx, S_nom, device)
+        mr_opp = mr_opp_flat.reshape(B, S_nom, A, m_)
+        mr_opp[:, :, i, :] = marginal_rank[:, i, :].unsqueeze(1).expand(B, S_nom, m_)
+
+        mr_flat_t = mr_opp.reshape(B * S_nom, A, m_)
+        endow_rep = endow_idx.unsqueeze(1).expand(B, S_nom).reshape(B * S_nom)
+
+        sorted_truth_flat = _get_chosen_bundle_sorted(cfg, mech_fn, mr_flat_t, endow_rep, i)
+        sorted_truth = sorted_truth_flat.reshape(B, S_nom, m_)   # [B, S_t, m]
+
+        # --- Lie: M_nom misreports × S_nom opponent profiles ---
+        mr_mis_flat = sample_domain_mr_flat(cfg, domain, endow_idx, M_nom, device)
+        mr_mis = mr_mis_flat.reshape(B, M_nom, A, m_)
+
+        mr_mis_full = mr_opp.unsqueeze(1).expand(B, M_nom, S_nom, A, m_).clone()
+        mr_mis_full[:, :, :, i, :] = mr_mis[:, :, i, :].unsqueeze(2).expand(B, M_nom, S_nom, m_)
+
+        BMS      = B * M_nom * S_nom
+        mr_mis_f = mr_mis_full.reshape(BMS, A, m_)
+        endow_r2 = endow_idx.view(B, 1, 1).expand(B, M_nom, S_nom).reshape(BMS)
+
+        sorted_lie_flat = _get_chosen_bundle_sorted(cfg, mech_fn, mr_mis_f, endow_r2, i)
+        sorted_lie = sorted_lie_flat.reshape(B, M_nom, S_nom, m_)   # [B, M, S_l, m]
+
+        # fosd_T_over_L[b, m, s_t, s_l]: truth(s_t) ⪰_FOSD lie(m, s_l)
+        #   = sorted_truth[s_t] ≤ sorted_lie[m,s_l] elementwise (lower rank = better)
+        truth_exp = sorted_truth.unsqueeze(1).unsqueeze(3)  # [B, 1, S_t, 1, m]
+        lie_exp   = sorted_lie.unsqueeze(2)                  # [B, M, 1,   S_l, m]
+        diff      = truth_exp - lie_exp                      # [B, M, S_t, S_l, m]
+        fosd_T_over_L = (diff <= 1e-8).all(dim=-1)          # [B, M, S_t, S_l]
+
+        # BC: ∃s_l: NO truth bundle dominates it → lie bundle undominated by all truth
+        any_truth_dom = fosd_T_over_L.any(dim=2)             # [B, M, S_l]
+        bc_viol       = (~any_truth_dom).any(dim=2)           # [B, M]
+
+        # WC: ∃s_t: truth bundle can't dominate ANY lie bundle
+        any_lie_dom   = fosd_T_over_L.any(dim=3)             # [B, M, S_t]
+        wc_viol       = (~any_lie_dom).any(dim=2)             # [B, M]
+
+        obvious  = (bc_viol | wc_viol).float()               # [B, M]
+        max_obv  = obvious.max(dim=1).values                  # [B]
+        all_viol.append(max_obv)
+
+    viol = torch.stack(all_viol, dim=1)   # [B, A]
+    return float(viol.mean()), float((viol.max(1).values > 0.5).float().mean())
+
+
+@torch.no_grad()
+def evaluate_mechanism_fosd(name: str, mech_fn, cfg: Config, domain: DomainSpec,
+                             marginal_rank: torch.Tensor, endow_idx: torch.Tensor,
+                             S: torch.Tensor, wmax_s: torch.Tensor,
+                             eval_S: int | None = None,
+                             eval_M: int | None = None) -> dict:
+    """Evaluate a mechanism using unambiguous (FOSD) IR / PE / NOM.
+
+    IR and PE use fsd_ir_mask / unamb_ir_pe_mask (all responsive extensions).
+    NOM uses _unamb_nom_eval (set-based FOSD comparison, deterministic argmax).
+    Welfare is additive rank-sum (for comparability with existing tables).
+    """
+    s_nom = eval_S or S_EVAL
+    m_nom = eval_M or M_EVAL
+
+    probs   = _mech_fn_chunked(mech_fn, cfg, marginal_rank, endow_idx)
+    ES      = torch.einsum("bk,bak->ba", probs, S)
+    welfare = ES.sum(1).mean()
+
+    unamb_ir   = fsd_ir_mask(cfg, marginal_rank, endow_idx)       # [B, K]
+    unamb_irpe = unamb_ir_pe_mask(cfg, marginal_rank, endow_idx)  # [B, K]
+    chosen     = probs.argmax(1)                                   # [B]
+
+    ir_viol   = 1.0 - unamb_ir.gather(1, chosen.unsqueeze(1)).squeeze(1).mean()
+    irpe_rate = unamb_irpe.gather(1, chosen.unsqueeze(1)).squeeze(1).mean()
+
+    pe_m    = pareto_mask(S)
+    pe_rate = pe_m.gather(1, chosen.unsqueeze(1)).squeeze(1).mean()
+
+    nom_mean, nom_viol = _unamb_nom_eval(cfg, domain, mech_fn,
+                                         marginal_rank, endow_idx, s_nom, m_nom)
+
+    wmax_m = float(wmax_s.mean())
+    welfare_ratio = float(welfare) / wmax_m if abs(wmax_m) > 1e-9 else 1.0
+
+    return {
+        "name":          name,
+        "welfare":       float(welfare),
+        "welfare_ratio": welfare_ratio,
+        "ir_viol":       float(ir_viol),
+        "pe_rate":       float(pe_rate),
+        "irpe_rate":     float(irpe_rate),
+        "nom_mean":      nom_mean,
+        "nom_viol":      nom_viol,
+    }

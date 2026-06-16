@@ -4,7 +4,7 @@ import torch
 from .config import Config
 from .allocations import (
     build_all_allocs, endowment_scores, ir_mask, pareto_mask,
-    ir_pe_mask, num_allocations,
+    ir_pe_mask, num_allocations, agent_masks_all, balanced_mask, fsd_ir_mask,
 )
 
 
@@ -58,6 +58,46 @@ def ttc_ordinal(cfg: Config, marginal_rank: torch.Tensor,
     return _one_hot(final_idx, K)
 
 
+def priority_mechanism(cfg: Config, marginal_rank: torch.Tensor,
+                       endow_idx: torch.Tensor, S: torch.Tensor) -> torch.Tensor:
+    """Priority mechanism phi^IP (Manjunath-Westkamp 2025).
+
+    Restricted to component-wise-IR (FOSD-IR) & balanced allocations.
+    Staged, class-by-class refinement: for class c = 0, 1, ..., R-1
+    (most-preferred class first) and agent a = 0, 1, ..., A-1 (priority order),
+    keep only the surviving allocations that maximize agent a's count of
+    class-c items received. Class 0 (the "A" / attractive set) is fully
+    resolved across all agents before class 1 ("B") is consulted, etc.
+    Remaining ties are broken by lowest allocation index.
+    """
+    _, A, _ = marginal_rank.shape
+    device  = marginal_rank.device
+    K = num_allocations(cfg)
+    R = cfg.num_ranks
+
+    masks = agent_masks_all(cfg, device)              # [K, A, m]
+    bal     = balanced_mask(cfg, endow_idx, device)    # [B, K]
+    irmask  = fsd_ir_mask(cfg, marginal_rank, endow_idx)  # [B, K]
+    feasible = bal * irmask                            # [B, K]
+
+    mr = marginal_rank.float()                         # [B, A, m]
+
+    for c in range(R):
+        for a in range(A):
+            owned = masks[:, a, :]                                 # [K, m]
+            is_c  = (mr[:, a, :].unsqueeze(1) == c).float()        # [B, 1, m]
+            cnt   = (is_c * owned.unsqueeze(0)).sum(-1)            # [B, K]
+            score = cnt + (1.0 - feasible) * (-1e9)
+            max_score = score.max(dim=1, keepdim=True).values
+            keep = (score >= max_score - 1e-6).float()
+            feasible = feasible * keep
+
+    idx = torch.arange(K, device=device).float().unsqueeze(0)
+    tiebreak = feasible * (-idx) + (1.0 - feasible) * (-1e9)
+    chosen = tiebreak.argmax(dim=1)
+    return _one_hot(chosen, K)
+
+
 BENCHMARKS = {
     "Endowment":    endowment_mechanism,
     "WMAX-IR":      wmax_score_ir,
@@ -65,4 +105,5 @@ BENCHMARKS = {
     "WMAX-IR-PE":   wmax_score_ir_pe,
     "TTC-ordinal":  ttc_ordinal,
     "Random-IR-PE": random_ir_pe,
+    "Priority-IP":  priority_mechanism,
 }
