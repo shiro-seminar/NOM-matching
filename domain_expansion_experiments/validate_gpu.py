@@ -9,7 +9,7 @@ Usage on Colab:
 Expected output (must match before proceeding to run_fourd_gpu.py):
   [CHECK 1] Priority-IP  : 0/108 viol, bc=0, wc=0    PASS
   [CHECK 2] WMAX-IR-PE   : 36/108 viol, bc=0, wc=36  PASS
-  [CHECK 3] WMAX pattern : each endowment 1 agent, all smallest-bundle agent  PASS
+  [CHECK 3] WMAX pattern : each endowment 1 agent, all largest-bundle agent  PASS
   [CHECK 4] Negative ctrl: unamb IR+PE mask empty (strict, Example 1)  PASS
   All checks PASS -- GPU evaluator verified, safe to run run_fourd_gpu.py
 """
