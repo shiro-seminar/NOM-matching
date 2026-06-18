@@ -1,7 +1,9 @@
 """NOM + welfare losses with domain-aware sampling.
 
 NOM definition (Troyan-Morrill 2020):
-  obvious manipulation = min(relu(BC_lie - BC_truth), relu(WC_lie - WC_truth))
+  obvious manipulation = max(relu(BC_lie - BC_truth), relu(WC_lie - WC_truth))
+  (a misreport is an obvious manipulation if its best case OR its worst case
+  beats truth -> the OR is encoded as max; see `obvious = torch.max(...)` below)
 
 Domain-aware sampling: opponent profiles and misreports are drawn from the
 same domain (respecting owned/unowned rank constraints) so that NOM is

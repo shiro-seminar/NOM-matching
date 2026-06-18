@@ -57,6 +57,17 @@ DOMAINS: dict[str, DomainSpec] = {
         unowned_ranks=(0, 1, 2, 3),
     ),
 
+    # Strongly trichotomous (Manjunath-Westkamp 2025, Thm 3/4):
+    # eps(1)=eps(2)=1, nu(1)=1, nu(2)=0 -> non-endowed objects NOT allowed in
+    # the 2nd (bearable) class. Owned: rank 0 or 1; unowned: rank 0 or 2.
+    # This is the maximal domain for IR+PE+strategy-proof (n>=4).
+    "strongly_tri": DomainSpec(
+        name="strongly_tri",
+        num_ranks=3,
+        owned_ranks=(0, 1),
+        unowned_ranks=(0, 2),
+    ),
+
     # Strict total order: every item in a distinct class, no ties
     # Sampling: a random permutation of 0..m-1 per agent
     "strict": DomainSpec(
@@ -67,3 +78,24 @@ DOMAINS: dict[str, DomainSpec] = {
         strict=True,
     ),
 }
+
+
+# ---------------------------------------------------------------------------
+# Domain lattice (for the IR+PE+NOM maximal-domain frontier study)
+# ---------------------------------------------------------------------------
+#
+# Candidate (eps, nu) domains ordered (roughly) by inclusion, from the
+# strategy-proof floor (strongly trichotomous) up to four_chotomous. Used by
+# domain_frontier/ to map D_SP subset D_NOM subset D_IRPE.
+
+DOMAIN_LATTICE: tuple[str, ...] = (
+    "strongly_tri",            # nu(2)=0  (SP floor)
+    "trichotomous",            # nu(2)=1, eps(3)=0
+    "trichotomous_extended_e3",# eps(3)=1
+    "four_chotomous_e4",       # eps(k)=nu(k)=1 for k<=4
+)
+
+
+def domain_lattice() -> list[DomainSpec]:
+    """Return the candidate domains as DomainSpec objects, increasing richness."""
+    return [DOMAINS[name] for name in DOMAIN_LATTICE]
