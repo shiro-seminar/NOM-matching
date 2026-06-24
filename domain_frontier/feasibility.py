@@ -156,18 +156,71 @@ def feasibility_sample(cfg: Config, domain: DomainSpec, k_e: int,
     return {"k_e": k_e, "total": n_samples, "n_empty": n_empty, "example": example}
 
 
+def endowment_shapes(cfg: Config, device: str = "cpu") -> dict:
+    """Group valid endowments by sorted bundle-size shape.
+
+    Because (eps, nu) domains and unambiguous IR+PE are symmetric in objects and
+    agents, feasibility depends ONLY on the sorted size tuple (e.g. (2,2,2),
+    (3,2,1), (4,1,1) for m=6). So one representative per shape is exact -- we need
+    not loop over all endowments. Returns {shape_tuple: [endow_idx, ...]}.
+    """
+    A = cfg.num_agents
+    allocs = build_all_allocs(cfg).to(device)
+    counts = torch.stack([(allocs == i).sum(1) for i in range(A)], 1)   # [K, A]
+    valid = (counts.min(1).values >= 1).nonzero(as_tuple=True)[0]
+    shapes: dict = {}
+    for k in valid.tolist():
+        shape = tuple(sorted((int(c) for c in counts[k].tolist()), reverse=True))
+        shapes.setdefault(shape, []).append(k)
+    return shapes
+
+
+@torch.no_grad()
+def feasibility_by_shape(cfg: Config, domain: DomainSpec,
+                         n_samples: int = 20000, chunk: int = 128,
+                         device: str = "cpu", verbose: bool = True) -> dict:
+    """IR+PE feasibility per endowment SHAPE (one representative each, exact by
+    symmetry). Far cheaper than looping all endowments. 'feasible' means no empty
+    found (sampled when full enumeration is too large -> not a proof); 'INFEASIBLE'
+    means an empty profile was found (a proof)."""
+    import math
+    shapes = endowment_shapes(cfg, device)
+    out = {}
+    any_infeasible = False
+    for shape in sorted(shapes, reverse=True):
+        rep = shapes[shape][0]
+        # nbal = multinomial(m; sizes); pick chunk so B*nbal^2*A stays ~<3e8
+        nbal = math.factorial(cfg.num_items)
+        for s in shape:
+            nbal //= math.factorial(s)
+        sh_chunk = max(1, min(chunk, int(3e8 / (max(nbal, 1) ** 2 * cfg.num_agents))))
+        res = domain_feasible(cfg, domain, n_samples=n_samples, chunk=sh_chunk,
+                              device=device, verbose=False, endow_list=[rep])
+        out[shape] = res
+        if not res["feasible"]:
+            any_infeasible = True
+        if verbose:
+            tag = "feasible" if res["feasible"] else f"INFEASIBLE (empties={res['n_empty']})"
+            print(f"    shape {str(shape):14s}: {tag}", flush=True)
+    return {"domain": domain.name, "by_shape": out, "feasible_all_shapes": not any_infeasible}
+
+
 @torch.no_grad()
 def domain_feasible(cfg: Config, domain: DomainSpec,
                     max_enum_per_endow: int = 200_000,
                     n_samples: int = 20000, chunk: int = 128,
-                    device: str = "cpu", verbose: bool = True) -> dict:
-    """Check IR+PE feasibility of `domain` over all valid endowments.
+                    device: str = "cpu", verbose: bool = True,
+                    endow_list: list[int] | None = None) -> dict:
+    """Check IR+PE feasibility of `domain` over endowments.
 
     Uses exact enumeration when an endowment's profile count <= max_enum_per_endow,
-    else sampling. Returns the first empty profile found (a feasibility witness of
+    else sampling. Returns the first empty profile found (a witness of
     INfeasibility) if any.
+
+    endow_list: restrict to these endowments (e.g. the single balanced (k,k,k)
+    endowment for an objects-per-agent study). Defaults to all valid endowments.
     """
-    endows = valid_endowments(cfg)
+    endows = endow_list if endow_list is not None else valid_endowments(cfg)
     total_empty = 0
     example = None
     mode_used = "enumerate"

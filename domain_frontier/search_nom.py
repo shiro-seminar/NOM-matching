@@ -198,16 +198,39 @@ def make_mech_fn(net: AllocationNet):
 def verify_nom_fullenum(cfg: Config, domain: DomainSpec, net: AllocationNet,
                         endow_list: list[int] | None = None,
                         chunk: int = 65536, device: str = "cpu",
-                        verbose: bool = True) -> dict:
+                        verbose: bool = True, check_feasible: bool = True) -> dict:
     """Run the full-enum FOSD-NOM oracle over (endowment, agent) cells.
 
     Returns the number of NOM-violating cells. 0 -> verified witness (D in D_NOM).
     IR+PE holds by construction of the mask, so only NOM is checked here.
+
+    PRECONDITION (asserted when check_feasible=True): the domain is unambiguously
+    IR+PE feasible on `endow_list`. The IR+PE guarantee relies on the mask never
+    falling back to the endowment, which only holds when no profile has an empty
+    IR+PE set. If feasibility fails, the chosen allocation may violate unambiguous
+    PE on the empty-set profiles and the NOM result would not certify an IR+PE+NOM
+    mechanism -- so we refuse to run rather than report a misleading witness.
     """
     allocs = build_all_allocs(cfg)
     counts = torch.stack([(allocs == i).sum(1) for i in range(cfg.num_agents)], 1)
     if endow_list is None:
         endow_list = (counts.min(1).values >= 1).nonzero(as_tuple=True)[0].tolist()
+
+    if check_feasible:
+        from domain_frontier.feasibility import domain_feasible
+        feas = domain_feasible(cfg, domain, device=device, verbose=False,
+                               endow_list=endow_list)
+        if not feas["feasible"]:
+            raise AssertionError(
+                f"domain '{domain.name}' is NOT IR+PE feasible on the given "
+                f"endowments ({feas['n_empty']} empty-set profiles found; "
+                f"example={feas['example_empty']}). The witness's IR+PE guarantee "
+                f"would break via endowment fallback -- aborting NOM verification. "
+                f"Pass check_feasible=False only if you handle PE separately.")
+        if verbose:
+            print(f"  [precondition] IR+PE feasible on {len(endow_list)} endowments "
+                  f"(mode={feas['mode']})", flush=True)
+
     mech_fn = make_mech_fn(net)
 
     viol_cells = 0

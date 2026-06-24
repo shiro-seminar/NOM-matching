@@ -99,3 +99,38 @@ DOMAIN_LATTICE: tuple[str, ...] = (
 def domain_lattice() -> list[DomainSpec]:
     """Return the candidate domains as DomainSpec objects, increasing richness."""
     return [DOMAINS[name] for name in DOMAIN_LATTICE]
+
+
+def make_mchotomous(R: int) -> DomainSpec:
+    """R-chotomous domain: eps(k)=nu(k)=1 for k<=R (all weak orders with <= R
+    indifference classes). owned and unowned may occupy any of the R classes.
+
+    NOTE (ordinal equivalence): with only `m` objects per agent, at most `m`
+    distinct classes can be realised, so an R-chotomous domain is ordinally
+    richer than four_chotomous ONLY when each agent ranks >= 5 objects. For
+    m_per_agent < R the extra classes add no genuinely new profiles.
+    """
+    ranks = tuple(range(R))
+    return DomainSpec(name=f"{R}_chotomous", num_ranks=R,
+                      owned_ranks=ranks, unowned_ranks=ranks)
+
+
+# Domains strictly richer than four_chotomous (genuine only at >=5 objects/agent).
+for _R in (5, 6):
+    DOMAINS[f"{_R}_chotomous"] = make_mchotomous(_R)
+
+
+def richness_lattice(max_R: int = 6) -> list[DomainSpec]:
+    """strongly_tri -> trichotomous -> eps(3) -> four_chotomous -> R-chotomous...
+
+    The chain by which we probe where the maximal IR+PE (and +NOM) domain sits,
+    extended beyond four_chotomous via R-chotomous domains for R up to max_R.
+    """
+    chain = [DOMAINS["strongly_tri"], DOMAINS["trichotomous"],
+             DOMAINS["trichotomous_extended_e3"], DOMAINS["four_chotomous_e4"]]
+    for R in range(5, max_R + 1):
+        name = f"{R}_chotomous"
+        if name not in DOMAINS:
+            DOMAINS[name] = make_mchotomous(R)
+        chain.append(DOMAINS[name])
+    return chain
