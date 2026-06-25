@@ -210,15 +210,16 @@ def nom_map_by_shape(ms=(4, 6), max_R: int = 6, n_profiles: int = 256,
                                        endow_list=[rep])["feasible"]
                 if feas:
                     irpe_max = dom.name
-                # estimate worst per-cell Ni*P from report-set sizes
+                # Per-cell full-enum cost: Ni*P = sizes[i] * prod_{j!=i} sizes[j]
+                # = prod(sizes) = total, the SAME for every agent i. (The earlier
+                # max(total//s) underestimated by min(sizes) and caused an OOM.)
                 sizes = [enumerate_reports(dom, [(alloc_e[j].item() == a)
                          for j in range(m)]).shape[0] for a in range(A)]
                 total = 1
                 for s in sizes:
                     total *= s
-                worst = max(total // s for s in sizes)   # Ni*P for the cell with that i
-                if worst > cap:
-                    row.append((dom.name, feas, "intractable"))
+                if total > cap:
+                    row.append((dom.name, feas, f"intractable(NixP={total:.1e})"))
                     break   # richer domains only larger
                 nomviol = _nom_cells(cfg, dom, rep)
                 row.append((dom.name, feas, f"{nomviol}cells"))
