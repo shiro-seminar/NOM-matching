@@ -46,11 +46,17 @@ def _sorted_received_bundle(cfg: Config, allocs: torch.Tensor, chosen_k: int,
 @torch.no_grad()
 def unamb_sp_violation_rate(cfg: Config, domain: DomainSpec, mech_fn,
                             n_profiles: int = 400, seed: int = 0,
-                            return_example: bool = False) -> dict:
+                            return_example: bool = False,
+                            endow_idx: int | None = None) -> dict:
     """Estimate the fraction of profiles with an unambiguous-SP violation.
 
     Samples n_profiles domain-consistent profiles. For each, scans every agent and
     every domain-valid misreport (opponents truthful) for an FOSD non-domination.
+
+    endow_idx: if given, fix the endowment (e.g. a shape representative) instead of
+    sampling a random one -- used by the SP shape-map. A 0 violation rate means the
+    reference mechanism IS unambiguously SP there -> that domain is a sound LOWER
+    BOUND member of D_SP at this shape.
 
     Returns dict: {sp_viol, n, (example)}.
     """
@@ -61,40 +67,45 @@ def unamb_sp_violation_rate(cfg: Config, domain: DomainSpec, mech_fn,
     example = None
 
     for _ in range(n_profiles):
-        ei = random_endowment(cfg, 1)
+        if endow_idx is None:
+            ei = random_endowment(cfg, 1)
+        else:
+            ei = torch.tensor([endow_idx], dtype=torch.long)
         k_e = int(ei[0])
         endow = allocs[k_e]
         mr = sample_domain_marginal_rank(cfg, domain, ei)[0]    # [A, m] truthful
         viol = False
 
+        dev = mr.device
+        R = float(cfg.num_ranks)
         for i in range(A):
             owned = [(endow[j].item() == i) for j in range(m)]
-            reps = enumerate_reports(domain, owned)              # [Ni, m] incl. truth
+            reps = enumerate_reports(domain, owned).to(dev)      # [Ni, m] incl. truth
+            Ni = reps.shape[0]
             true_i = mr[i]
 
-            prof = mr.clone().unsqueeze(0)
-            S = score_matrix(cfg, prof)
-            ti = int(mech_fn(cfg, prof, ei, S).argmax(1)[0])
-            t_sorted = _sorted_received_bundle(cfg, allocs, ti, i, true_i)
+            # All Ni profiles at once: opponents truthful (=mr), agent i -> each report.
+            batch = mr.unsqueeze(0).repeat(Ni, 1, 1)             # [Ni, A, m]
+            batch[:, i, :] = reps
+            ei_b = torch.full((Ni,), k_e, dtype=torch.long, device=dev)
+            chosen = mech_fn(cfg, batch, ei_b, score_matrix(cfg, batch)).argmax(1)  # [Ni]
 
-            for r in reps:
-                if torch.equal(r, true_i):
-                    continue
-                prof2 = mr.clone()
-                prof2[i] = r
-                prof2 = prof2.unsqueeze(0)
-                S2 = score_matrix(cfg, prof2)
-                li = int(mech_fn(cfg, prof2, ei, S2).argmax(1)[0])
-                l_sorted = _sorted_received_bundle(cfg, allocs, li, i, true_i)
-                # unambiguous-SP violation: truth does NOT FOSD-weakly dominate lie
-                if not bool((t_sorted <= l_sorted + 1e-9).all()):
-                    viol = True
-                    if example is None:
-                        example = {"endow_idx": k_e, "agent": i,
-                                   "marginal_rank": mr.tolist(),
-                                   "misreport": r.tolist()}
-                    break
-            if viol:
+            got = (allocs[chosen] == i)                          # [Ni, m] items i receives
+            bundle = torch.where(got, true_i.float().unsqueeze(0),
+                                 torch.full((Ni, m), R, device=dev))
+            l_sorted, _ = torch.sort(bundle, dim=1)              # [Ni, m] under TRUE ranks
+            truth_mask = (reps == true_i.unsqueeze(0)).all(1)    # [Ni]
+            t_sorted = l_sorted[truth_mask][0]                   # [m] truthful bundle
+            # SP violation: a misreport whose bundle is NOT FOSD-weakly dominated by truth
+            dominated = (t_sorted.unsqueeze(0) <= l_sorted + 1e-9).all(1)   # [Ni]
+            viol_mask = (~dominated) & (~truth_mask)
+            if bool(viol_mask.any()):
+                viol = True
+                if example is None:
+                    j = int(viol_mask.nonzero(as_tuple=True)[0][0])
+                    example = {"endow_idx": k_e, "agent": i,
+                               "marginal_rank": mr.tolist(),
+                               "misreport": reps[j].tolist()}
                 break
         if viol:
             sp_viol += 1

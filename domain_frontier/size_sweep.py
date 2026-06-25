@@ -25,7 +25,7 @@ import torch
 from domain_expansion_experiments.config import Config
 from domain_expansion_experiments.domains import DOMAINS, richness_lattice
 from domain_expansion_experiments.allocations import build_all_allocs
-from domain_frontier.feasibility import domain_feasible, feasibility_by_shape
+from domain_frontier.feasibility import domain_feasible, feasibility_by_shape, endowment_shapes
 
 
 def contiguous_endow_idx(num_agents: int, k: int) -> tuple[int, int]:
@@ -109,20 +109,65 @@ def sweep_by_m(ms=(4, 5, 6, 7), max_R: int = 6, n_samples: int = 20000,
     return out
 
 
+def sp_map_by_shape(ms=(4, 6, 8), max_R: int = 6, n_profiles: int = 300,
+                    device: str = "cpu", verbose: bool = True) -> dict:
+    """SP shape-map: for each total m and endowment SHAPE, find the richest domain
+    on which the REFERENCE mechanism (priority_mechanism) is unambiguously SP
+    (sampled). SP-viol==0 -> that domain is a sound LOWER BOUND member of D_SP at
+    the shape (the mechanism is an explicit SP witness). Combined with the IR+PE
+    shape-map this gives D_SP(shape) <= D_NOM(shape) <= D_IRPE(shape).
+
+    Cheap (sampling, no full-enum) -> GPU-friendly. Question: does the SP-achievable
+    boundary, like IR+PE, jump up for singleton-heavy shapes (k,1,1)?
+    """
+    from domain_frontier.sp_test import unamb_sp_violation_rate
+    from domain_expansion_experiments.benchmarks import priority_mechanism
+    A = 3
+    out = {}
+    for m in ms:
+        print(f"\n############ SP shape-map  m={m} (n={A}) ############", flush=True)
+        shapes = endowment_shapes(Config(num_agents=A, num_items=m), device)
+        m_out = {}
+        for shape in sorted(shapes, reverse=True):
+            rep = shapes[shape][0]
+            sp_ok_max = None
+            row = []
+            for dom in richness_lattice(max_R):
+                cfg = Config(domain=dom.name, num_agents=A, num_items=m)
+                r = unamb_sp_violation_rate(cfg, dom, priority_mechanism,
+                                            n_profiles=n_profiles, seed=0,
+                                            endow_idx=rep)
+                row.append((dom.name, r["sp_viol"]))
+                if r["sp_viol"] == 0:
+                    sp_ok_max = dom.name
+            m_out[shape] = {"sp_witness_max": sp_ok_max, "row": row}
+            if verbose:
+                detail = "  ".join(f"{d.split('_')[0]}:{v}" for d, v in row)
+                print(f"    shape {str(shape):14s}: SP-witness MAX = {sp_ok_max}"
+                      f"   [{detail}]", flush=True)
+        out[m] = m_out
+    return out
+
+
 if __name__ == "__main__":
     import argparse
     p = argparse.ArgumentParser()
-    p.add_argument("--mode", choices=["balanced", "by_m"], default="balanced",
-                   help="'balanced': fixed (k,k,k); 'by_m': all shapes per total m")
+    p.add_argument("--mode", choices=["balanced", "by_m", "sp_by_shape"], default="balanced",
+                   help="'balanced': fixed (k,k,k); 'by_m': IR+PE per shape; "
+                        "'sp_by_shape': SP-witness per shape")
     p.add_argument("--ks", type=int, nargs="+", default=[2, 3])
     p.add_argument("--ms", type=int, nargs="+", default=[4, 5, 6, 7])
     p.add_argument("--max_R", type=int, default=6)
     p.add_argument("--n_samples", type=int, default=20000)
+    p.add_argument("--n_profiles", type=int, default=300)
     p.add_argument("--device", type=str, default="cpu")
     args = p.parse_args()
     if args.mode == "by_m":
         sweep_by_m(ms=tuple(args.ms), max_R=args.max_R,
                    n_samples=args.n_samples, device=args.device)
+    elif args.mode == "sp_by_shape":
+        sp_map_by_shape(ms=tuple(args.ms), max_R=args.max_R,
+                        n_profiles=args.n_profiles, device=args.device)
     else:
         sweep(ks=tuple(args.ks), max_R=args.max_R,
               n_samples=args.n_samples, device=args.device)
