@@ -149,10 +149,95 @@ def sp_map_by_shape(ms=(4, 6, 8), max_R: int = 6, n_profiles: int = 300,
     return out
 
 
+def nom_map_by_shape(ms=(4, 6), max_R: int = 6, n_profiles: int = 256,
+                     S_nom: int = 24, M_nom: int = 24, device: str = "cpu",
+                     verbose: bool = True) -> dict:
+    """NOM shape-map: for each total m and endowment SHAPE, find the richest domain
+    that is BOTH (a) unambiguous IR+PE feasible AND (b) on which the reference
+    mechanism is unambiguous-NOM (sampled). That domain is a sound LOWER BOUND
+    member of D_NOM (priority_mechanism is an explicit NOM witness there).
+
+    Compare NOM-witness-max to the IR+PE-max (experiment E):
+      - if they COINCIDE  -> D_NOM = D_IRPE at that shape (NOM does not cut below);
+      - if NOM-max < IR+PE-max -> NOM cuts strictly below IR+PE (the novel case).
+
+    We MUST intersect with IR+PE feasibility: on an IR+PE-INfeasible rich domain the
+    mechanism falls back to the endowment and looks trivially NOM, which is NOT a
+    D_NOM membership (no IR+PE mechanism exists there).
+
+    SOUND: NOM is checked with the FULL-ENUM FOSD oracle (full_enum_v2), which
+    enumerates ALL opponent profiles -- mandatory, since SAMPLING opponents leaves
+    the reachable-bundle sets incomplete and makes the BC/WC criterion over-fire
+    (phantom violations). full-enum is intractable for rich domains at m>=6, so we
+    cap per-cell cost (Ni*P): cells above `cap` are marked 'intractable' and the
+    richer domains skipped. So NOM-witness-max is a LOWER BOUND limited by what is
+    computable.
+
+    S_nom/M_nom are unused (kept for CLI compatibility).
+    """
+    from domain_expansion_experiments.benchmarks import priority_mechanism
+    from domain_expansion_experiments.allocations import build_all_allocs
+    from domain_expansion_experiments.full_enum import enumerate_reports
+    from domain_expansion_experiments.full_enum_v2 import build_mask_table, eval_all_true_prefs
+
+    def _nom_cells(cfg, dom, rep):
+        """Full-enum NOM violation cell count for priority_mechanism at endowment rep."""
+        viol = 0
+        for agent_i in range(cfg.num_agents):
+            reports_i, mask_codes, Ni, P = build_mask_table(
+                cfg, dom, priority_mechanism, rep, agent_i, device=device)
+            if eval_all_true_prefs(cfg, reports_i, mask_codes)["viol_rate"] > 0:
+                viol += 1
+        return viol
+
+    cap = 8e7   # max Ni*P per (endowment, agent) cell to attempt on CPU
+    A = 3
+    out = {}
+    for m in ms:
+        print(f"\n############ NOM shape-map  m={m} (n={A}, full-enum, cap={cap:.0e}) ############", flush=True)
+        cfg0 = Config(num_agents=A, num_items=m)
+        shapes = endowment_shapes(cfg0, device)
+        allocs = build_all_allocs(cfg0)
+        m_out = {}
+        for shape in sorted(shapes, reverse=True):
+            rep = shapes[shape][0]
+            alloc_e = allocs[rep]
+            irpe_max = nom_max = None
+            row = []
+            for dom in richness_lattice(max_R):
+                cfg = Config(domain=dom.name, num_agents=A, num_items=m)
+                feas = domain_feasible(cfg, dom, device=device, verbose=False,
+                                       endow_list=[rep])["feasible"]
+                if feas:
+                    irpe_max = dom.name
+                # estimate worst per-cell Ni*P from report-set sizes
+                sizes = [enumerate_reports(dom, [(alloc_e[j].item() == a)
+                         for j in range(m)]).shape[0] for a in range(A)]
+                total = 1
+                for s in sizes:
+                    total *= s
+                worst = max(total // s for s in sizes)   # Ni*P for the cell with that i
+                if worst > cap:
+                    row.append((dom.name, feas, "intractable"))
+                    break   # richer domains only larger
+                nomviol = _nom_cells(cfg, dom, rep)
+                row.append((dom.name, feas, f"{nomviol}cells"))
+                if feas and nomviol == 0:
+                    nom_max = dom.name
+            m_out[shape] = {"irpe_max": irpe_max, "nom_witness_max": nom_max, "row": row}
+            if verbose:
+                cut = "== IRPE" if nom_max == irpe_max else f"< IRPE(={irpe_max})"
+                print(f"    shape {str(shape):14s}: NOM-witness MAX = {nom_max}  "
+                      f"[{cut}]  rows={row}", flush=True)
+        out[m] = m_out
+    return out
+
+
 if __name__ == "__main__":
     import argparse
     p = argparse.ArgumentParser()
-    p.add_argument("--mode", choices=["balanced", "by_m", "sp_by_shape"], default="balanced",
+    p.add_argument("--mode", choices=["balanced", "by_m", "sp_by_shape", "nom_by_shape"],
+                   default="balanced",
                    help="'balanced': fixed (k,k,k); 'by_m': IR+PE per shape; "
                         "'sp_by_shape': SP-witness per shape")
     p.add_argument("--ks", type=int, nargs="+", default=[2, 3])
@@ -168,6 +253,9 @@ if __name__ == "__main__":
     elif args.mode == "sp_by_shape":
         sp_map_by_shape(ms=tuple(args.ms), max_R=args.max_R,
                         n_profiles=args.n_profiles, device=args.device)
+    elif args.mode == "nom_by_shape":
+        nom_map_by_shape(ms=tuple(args.ms), max_R=args.max_R,
+                         n_profiles=args.n_profiles, device=args.device)
     else:
         sweep(ks=tuple(args.ks), max_R=args.max_R,
               n_samples=args.n_samples, device=args.device)
